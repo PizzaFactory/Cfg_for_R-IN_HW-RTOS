@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature id="jp.pizzafactory.dsl.itroncfg.sdk"
+	label="ItronCfg SDK Feature "
+	version="1.0.0.qualifier">
+	<plugin
+			id="jp.pizzafactory.dsl.itroncfg"
+			download-size="0"
+			install-size="0"
+			version="0.0.0"
+			unpack="false"/>
+	<plugin
+			id="jp.pizzafactory.dsl.itroncfg.ui"
+			download-size="0"
+			install-size="0"
+			version="0.0.0"
+			unpack="false"/>
+</feature>

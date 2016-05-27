@@ -1,0 +1,82 @@
+grammar jp.pizzafactory.dsl.rin.ItronCfg hidden(WS, SL_COMMENT, ML_COMMENT)
+
+import "http://www.eclipse.org/emf/2002/Ecore" as ecore
+generate itronCfg "http://www.pizzafactory.jp/dsl/rin/ItronCfg"
+
+Model:
+	(apis += Api ';')* ;
+
+Api: CRE_TSK | CRE_SEM | CRE_FLG | CRE_MBX | CRE_MTX | DEF_INH | INCLUDE;
+
+CRE_TSK: 'CRE_TSK' '(' id=ID ',' '{' attrs += TskAttr ('|' attrs += TskAttr)* ',' exinf=Expression ',' func=Expression ',' pri=Expression ',' stksz=Expression ','  stk=Expression '}' ')';
+enum TskAttr: TA_HLNG | TA_ASM | TA_ACT;
+CRE_SEM: 'CRE_SEM' '(' id=ID ',' '{' attrs += SemAttr ('|' attrs += SemAttr)* ',' icnt=Expression ',' max=Expression '}' ')';
+enum SemAttr: TA_TFIFO | TA_TPRI;
+CRE_FLG: 'CRE_FLG' '(' id=ID ',' '{' attrs += FlgAttr ('|' attrs += FlgAttr)* ',' ptn=Expression '}' ')';
+enum FlgAttr: TA_TFIFO | TA_TPRI | TA_WSGL | TA_WMUL;
+CRE_MBX: 'CRE_MBX' '(' id=ID ',' '{' attrs += MbxAttr ('|' attrs += MbxAttr)* ',' maxmpri=Expression ',' mprihd=Expression '}' ')';
+enum MbxAttr: TA_TFIFO | TA_TPRI | TA_MFIFO | TA_MPRI;
+CRE_MTX: 'CRE_MTX' '(' id=ID ',' '{' attrs += MtxAttr ('|' attrs += MtxAttr)* ',' ceilpri=Expression '}' ')';
+enum MtxAttr: TA_TFIFO | TA_TPRI | TA_INHERIT | TA_CEILING;
+
+DEF_INH: 'DEF_INH' '(' inhno=ID ',' '{' attrs += TskAttr ('|' attrs += TskAttr)* ',' inthdr=Expression '}' ')';
+enum InhAttr: TA_HLNG | TA_ASM;
+
+INCLUDE: 'INCLUDE' '(' file=STRING ')';
+
+IMPORT: '#' 'include' file=(AB_STRING|STRING);
+
+/* Expressions */
+BasicExpression returns Expr: Identifier | Integer | Float | StringList | Character | '(' Expression ')';
+Identifier: value=ID;
+Integer: value=(INT|HEX_CONSTANT|OCTAL_CONSTANT);
+Float: value=FLOATING_CONSTANT;
+StringList: value=STRING;
+Character: value=CHARACTER_LITERAL;
+
+SuffixExpression returns Expr: BasicExpression (suffixes += SuffixPart)*;
+SuffixPart: {ArrayRef} '[' index=Expression ']' |
+ ({StructMemberRef} refOp=StructRefEnum memberId=Identifier);
+//PostPpExpression returns Expr: SuffixExpression | {PostPpExpression} value=SuffixExpression op=PpOpEnum;
+PrePpExpression returns Expr: SuffixExpression | {PrePpExpression} op=PpOpEnum value=SuffixExpression;
+enum PpOpEnum: PP = "++" | MM = "--"; 
+SizeofExpression returns Expr: PrePpExpression | {SizeofExpression} 'sizeof' value=PrePpExpression;
+MonoExpression returns Expr: SizeofExpression | {MonoExpression} op=MonoOpEnum value=SizeofExpression;
+
+CastExpression returns Expr: MonoExpression | {CastExpression} (types += CastPart)+ value=MonoExpression;
+CastPart returns Expr: '(' name=ObjectTypeEnum (isPtr ?= "*")? ')';
+enum ObjectTypeEnum: FP;
+MulDivExpression returns Expr: CastExpression ({MulDivExpression.left = current} op=('*'|'/'|'%') right=CastExpression)*;
+AddSubExpression returns Expr: MulDivExpression ({AddSubExpresssion.left = current} addSubOp=AddSubOpEnum right=MulDivExpression)*;
+ShiftExpression returns Expr: AddSubExpression ({ShiftExpression.left = current} op=SHIFT_OPERATOR right=AddSubExpression)*;
+LtGtExpression returns Expr: ShiftExpression ({LtGtExpression.left = current} op=LTGT_OPERATOR right=ShiftExpression)*;
+EqNeExpression returns Expr: LtGtExpression ({EqNeExpression.left = current} op=EQNE_OPERATOR right=LtGtExpression)*;
+AndExpression returns Expr: EqNeExpression ({AndExpression.left = current} '&' right=EqNeExpression)*;
+ExorExpression returns Expr: AndExpression ({ExorExpression.left = current} '^' right=AndExpression)*;
+OrExpression returns Expr: ExorExpression ({OrExpression.left = current} '|' right=ExorExpression)*;
+LAndExpression returns Expr: OrExpression ({LAndExpression.left = current} '&&' right=OrExpression)*;
+LOrExpression returns Expr: LAndExpression ({LOrExpression.left = current} '||' right=LAndExpression)*;
+CondExpression returns Expr: LOrExpression ({CondExpression.left =current} '?' ifTrue = Expression ':' ifFalse =CondExpression)*;
+Expression returns Expr: CondExpression;
+
+enum StructRefEnum: DOT='.' | PTR='->';
+enum MonoOpEnum: FROM_PTR='*' | TO_PTR='&' | ABS='+' | MINUS='-' | BITWISE='~' | NOT='!';
+enum AddSubOpEnum: ADD='+' | SUB='-';
+terminal SHIFT_OPERATOR: '<<'|'>>';
+terminal LTGT_OPERATOR: '<'|'>'|'<='|'>=';
+terminal EQNE_OPERATOR: '=='|'!=';
+
+terminal ID: ('a'..'z'|'A'..'Z'|'_')('0'..'9'|'a'..'z'|'A'..'Z'|'_')*;
+
+terminal HEX_CONSTANT returns ecore::EInt: '0x'('0'..'9'|'a'..'f'|'A'..'F')+;
+terminal OCTAL_CONSTANT returns ecore::EInt: '0'('0'..'7')+;
+terminal INT returns ecore::EInt: ('1'..'9')('0'..'9')*|'0';
+terminal FLOATING_CONSTANT returns ecore::EDouble: ('1'..'9')('0'..'9')* '.' ('0'..'9')* (('e'|'E')('+'|'-')?('0'..'9')+)?;
+terminal AB_STRING returns ecore::EString: '<' (!'>' | '\\' .)* '>';
+terminal STRING returns ecore::EString: '"' (!'"'| '\\' .)* '"';
+terminal CHARACTER_LITERAL returns ecore::EChar: "'" (!"'"| '\\' .) "'";
+
+terminal WS: (' ' | '\t' | '\r' | '\n')+;
+terminal SL_COMMENT: '//' !('\n' | '\r')* ('\r'? '\n')?;
+terminal ML_COMMENT: '/*' -> '*/';
+terminal ANY_OTHER: .;
